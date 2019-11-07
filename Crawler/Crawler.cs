@@ -1,18 +1,21 @@
-﻿using CrawlerLib.Models;
+﻿using CrawlerLib.Extensions;
+using CrawlerLib.Models;
 using HtmlAgilityPack;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace CrawlerLib
 {
     public class Crawler
     {
-        private Queue<Page> _pagesToProcess;
-        private List<Page> _processedPages;
+        private ConcurrentQueue<Page> _pagesToProcess;
+        private ConcurrentBag<Page> _processedPages;
         private ISet<Uri> _visitedLinks;
         private Uri _startUri;
 
@@ -42,8 +45,8 @@ namespace CrawlerLib
 
         private void BaseInitialization(Uri uri)
         {
-            _pagesToProcess = new Queue<Page>();
-            _processedPages = new List<Page>();
+            _pagesToProcess = new ConcurrentQueue<Page>();
+            _processedPages = new ConcurrentBag<Page>();
             _visitedLinks = new HashSet<Uri>();
             _client = new HttpClient();
 
@@ -71,21 +74,44 @@ namespace CrawlerLib
             _client.Timeout = TimeSpan.FromSeconds(timeInSeconds);
         }
 
-        public void Crawl()
+        public async Task Crawl(int maxTaskCount = 10, CancellationToken cancellationToken = default)
         {
-            while (_pagesToProcess.Count > 0)
+            var tasks = new HashSet<Task> { ProcessQueue(cancellationToken) };
+
+            while (tasks.Count > 0 && !cancellationToken.IsCancellationRequested)
             {
-                ProcessQueue();
+                try
+                {
+                    var finishedTask = await Task.WhenAny(tasks);
+                    tasks.Remove(finishedTask);
+                }
+                catch (TaskCanceledException)
+                {
+                    // Caller requested cancellation, so return now.
+                    return;
+                }
+
+                // Always process one, thats the minimum you can do.
+                AddProcessQueueTask();
+                if (_pagesToProcess.Count > maxTaskCount && tasks.Count < maxTaskCount)
+                    AddProcessQueueTask();
+            }
+
+            void AddProcessQueueTask()
+            {
+                var task = ProcessQueue(cancellationToken);
+                if (task != null)
+                    tasks.Add(task);
             }
         }
 
-        private void ProcessQueue()
+        private async Task ProcessQueue(CancellationToken cancellationToken)
         {
             if (_pagesToProcess.TryDequeue(out var page))
-                CrawlPage(page);
+                await CrawlPage(page, cancellationToken);
         }
 
-        private void CrawlPage(Page page)
+        private async Task CrawlPage(Page page, CancellationToken cancellationToken)
         {
             if (page == null)
                 return;
@@ -93,7 +119,7 @@ namespace CrawlerLib
             HttpResponseMessage response;
             try
             {
-                response = _client.GetAsync(page.Uri, HttpCompletionOption.ResponseHeadersRead).GetAwaiter().GetResult();
+                response = await _client.GetAsync(page.Uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
                 if (!response.IsSuccessStatusCode 
                     || response.Content.Headers.ContentLength == null
                     || response.Content.Headers.ContentLength == 0
@@ -106,7 +132,7 @@ namespace CrawlerLib
                 return;
             }
 
-            var bytes = response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
+            var bytes = await response.Content.ReadAsByteArrayAsync();
             page.Html = Encoding.Default.GetString(bytes);
 
             AfterParseEvent?.Invoke(page);
@@ -114,29 +140,43 @@ namespace CrawlerLib
             HtmlDocument document = new HtmlDocument();
             document.LoadHtml(page.Html);
 
-            var links = document.DocumentNode.SelectNodes("//a[@href]");
+            ProcessLinks(document);
+        }
+
+        private void ProcessLinks(HtmlDocument document)
+        {
+            var links = document.GetLinks();
             if (links == null)
                 return;
 
             foreach (var link in links)
             {
-                var value = link.GetAttributeValue("href", string.Empty);
-                if (string.IsNullOrEmpty(value))
+                var uri = ParseLink(link);
+                if (uri == null)
                     continue;
-
-                var uri = default(Uri);
-
-                // Not a valid URI Protocol (tel, skype, javascript, whatsapp, chrome:// etc.)
-                if (!Uri.TryCreate(value, UriKind.RelativeOrAbsolute, out uri))
-                    continue;
-
-                // Relative Uris indicate that they're from the same domain, so we convert them for parsing them later.
-                if (!uri.IsAbsoluteUri)
-                    uri = new Uri(new Uri(_startUri.OriginalString), uri);
 
                 // Pass the URI to avoid unneccarry heap allocations when allocating a Page Object here
                 EnqueuePage(uri);
             }
+        }
+
+        private Uri ParseLink(HtmlNode link)
+        {
+            var value = link.GetAttributeValue("href", string.Empty);
+            if (string.IsNullOrEmpty(value))
+                return null;
+
+            var uri = default(Uri);
+
+            // Not a valid URI Protocol (tel, skype, javascript, whatsapp, chrome:// etc.)
+            if (!Uri.TryCreate(value, UriKind.RelativeOrAbsolute, out uri))
+                return null;
+
+            // Relative Uris indicate that they're from the same domain, so we convert them for parsing them later.
+            if (!uri.IsAbsoluteUri)
+                uri = new Uri(new Uri(_startUri.OriginalString), uri);
+
+            return uri;
         }
     }
 }
