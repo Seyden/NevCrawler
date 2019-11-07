@@ -1,4 +1,5 @@
 ﻿using HtmlAgilityPack;
+using System.Linq;
 
 namespace CrawlerLib.Extensions
 {
@@ -11,7 +12,7 @@ namespace CrawlerLib.Extensions
 
         public static string GetHeaderTitle(this HtmlDocument document)
         {
-            return document.DocumentNode.SelectSingleNode("//head/title").InnerText;
+            return document.DocumentNode.Descendants("title").FirstOrDefault()?.InnerText;
         }
     }
 }
