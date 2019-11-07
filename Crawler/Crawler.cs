@@ -20,6 +20,8 @@ namespace CrawlerLib
 
         private HttpClient _client;
 
+        public IEnumerable<Page> Pages => _processedPages.ToArray();
+
         public delegate void AfterParse(Page page);
         public event AfterParse AfterParseEvent;
 
@@ -126,8 +128,7 @@ namespace CrawlerLib
                 return;
             }
 
-            var bytes = await response.Content.ReadAsByteArrayAsync();
-            page.Html = Encoding.UTF8.GetString(bytes);
+            page.Html = await response.Content.ReadAsStringAsync();
 
             _processedPages.Add(page);
 
