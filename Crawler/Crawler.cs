@@ -4,7 +4,6 @@ using HtmlAgilityPack;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Threading;
@@ -16,7 +15,7 @@ namespace CrawlerLib
     {
         private ConcurrentQueue<Page> _pagesToProcess;
         private ConcurrentBag<Page> _processedPages;
-        private ISet<Uri> _visitedLinks;
+        private ConcurrentDictionary<Uri, int> _visitedLinks;
         private Uri _startUri;
 
         private HttpClient _client;
@@ -24,22 +23,10 @@ namespace CrawlerLib
         public delegate void AfterParse(Page page);
         public event AfterParse AfterParseEvent;
 
-        public bool AutoSave = false;
-        public string SavePath = string.Empty;
+        public Func<Uri, bool> IgnoreUriFilter = null;
 
         public Crawler(Uri uri)
         {
-            BaseInitialization(uri);
-        }
-
-        public Crawler(Uri uri, bool autoSave, string savePath)
-        {
-            if (string.IsNullOrWhiteSpace(savePath))
-                throw new ArgumentException("SavePath can't be null or empty, please choose a path where your crawled pages should be saved.");
-
-            AutoSave = true;
-            SavePath = savePath;
-
             BaseInitialization(uri);
         }
 
@@ -47,7 +34,7 @@ namespace CrawlerLib
         {
             _pagesToProcess = new ConcurrentQueue<Page>();
             _processedPages = new ConcurrentBag<Page>();
-            _visitedLinks = new HashSet<Uri>();
+            _visitedLinks = new ConcurrentDictionary<Uri, int>();
             _client = new HttpClient();
 
             _startUri = uri;
@@ -57,6 +44,10 @@ namespace CrawlerLib
         // Wrapping it for the case if extra things are needed
         private void EnqueuePage(Uri uri)
         {
+            bool ignore = IgnoreUriFilter?.Invoke(uri) ?? false;
+            if (ignore)
+                return;
+
             if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
                 return;
 
@@ -65,7 +56,7 @@ namespace CrawlerLib
 
             Page page = new Page(uri);
 
-            if (_visitedLinks.Add(page.Uri))
+            if (_visitedLinks.TryAdd(page.Uri, 0))
                 _pagesToProcess.Enqueue(page);
         }
 
@@ -91,10 +82,13 @@ namespace CrawlerLib
                     return;
                 }
 
-                // Always process one, thats the minimum you can do.
-                AddProcessQueueTask();
-                if (_pagesToProcess.Count > maxTaskCount && tasks.Count < maxTaskCount)
+                if (_pagesToProcess.Count > 0)
+                {
+                    // Always process one, thats the minimum you can do.
                     AddProcessQueueTask();
+                    if (_pagesToProcess.Count > maxTaskCount && tasks.Count < maxTaskCount)
+                        AddProcessQueueTask();
+                }
             }
 
             void AddProcessQueueTask()
@@ -134,6 +128,8 @@ namespace CrawlerLib
 
             var bytes = await response.Content.ReadAsByteArrayAsync();
             page.Html = Encoding.Default.GetString(bytes);
+
+            _processedPages.Add(page);
 
             AfterParseEvent?.Invoke(page);
 
