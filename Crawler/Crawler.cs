@@ -78,6 +78,11 @@ namespace CrawlerLib
             _retryDelay = TimeSpan.FromSeconds(timeInSeconds);
         }
 
+        public void SetRetryCount(int retryCount)
+        {
+            _retryCount = retryCount;
+        }
+
         public async Task Crawl(int maxTaskCount = 10, CancellationToken cancellationToken = default)
         {
             var tasks = new HashSet<Task> { ProcessQueue(cancellationToken) };
@@ -158,7 +163,6 @@ namespace CrawlerLib
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine(ex.Message);
                     if (currentRetry++ > _retryCount)
                         throw;
                 }
