@@ -8,11 +8,17 @@ namespace NevCrawler
 {
     class Program
     {
+        /*
+         * THIS CODE IN THE MAIN CLASS IS ONLY A EXAMPLE
+         * 
+         */
+
         static Task Main(string[] args)
         {
-            string savePath = "";
+            string uri = args[0];
+            string savePath = args[1];
 
-            Crawler crawler = new Crawler(new Uri("https://crawler-test.com/"))
+            Crawler crawler = new Crawler(new Uri(uri))
             {
                 IgnoreUriFilter = x => x.ToString().Contains("infinite") || x.ToString().Contains("page_load_time")
             };
@@ -24,10 +30,11 @@ namespace NevCrawler
 
         public static void AfterParseEvent(Page page, string path)
         {
-            //if (!File.Exists(path))
-            //{
-            //    File.WriteAllText(path, page.Html);
-            //}
+            string fileName = $"{path}/{string.Join("_", page.Title.Split(Path.GetInvalidFileNameChars()))}.html";
+            if (!File.Exists(path))
+            {
+                File.WriteAllText(fileName, page.Html);
+            }
         }
     }
 }

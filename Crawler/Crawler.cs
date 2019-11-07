@@ -127,14 +127,15 @@ namespace CrawlerLib
             }
 
             var bytes = await response.Content.ReadAsByteArrayAsync();
-            page.Html = Encoding.Default.GetString(bytes);
+            page.Html = Encoding.UTF8.GetString(bytes);
 
             _processedPages.Add(page);
 
-            AfterParseEvent?.Invoke(page);
-
             HtmlDocument document = new HtmlDocument();
             document.LoadHtml(page.Html);
+            page.Title = document.GetHeaderTitle();
+
+            AfterParseEvent?.Invoke(page);
 
             ProcessLinks(document);
         }

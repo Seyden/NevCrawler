@@ -8,5 +8,10 @@ namespace CrawlerLib.Extensions
         {
             return document.DocumentNode.SelectNodes("//a[@href]");
         }
+
+        public static string GetHeaderTitle(this HtmlDocument document)
+        {
+            return document.DocumentNode.SelectSingleNode("//head/title").InnerText;
+        }
     }
 }
