@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29306.81
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NevCrawler", "NevCrawler\NevCrawler.csproj", "{BE558856-5968-45B8-A641-61132AED232E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CrawlerLib", "Crawler\CrawlerLib.csproj", "{736F94A8-690F-4534-A9B6-13CCBE179061}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{BE558856-5968-45B8-A641-61132AED232E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BE558856-5968-45B8-A641-61132AED232E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BE558856-5968-45B8-A641-61132AED232E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BE558856-5968-45B8-A641-61132AED232E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{736F94A8-690F-4534-A9B6-13CCBE179061}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{736F94A8-690F-4534-A9B6-13CCBE179061}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{736F94A8-690F-4534-A9B6-13CCBE179061}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{736F94A8-690F-4534-A9B6-13CCBE179061}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {C7432E56-6AF3-4373-AABB-F10B1220FD78}
+	EndGlobalSection
+EndGlobal
