@@ -20,6 +20,9 @@ namespace CrawlerLib
 
         private HttpClient _client;
 
+        private TimeSpan _retryDelay;
+        private int _retryCount;
+
         public IEnumerable<Page> Pages => _processedPages.ToArray();
 
         public delegate void AfterParse(Page page);
@@ -38,6 +41,9 @@ namespace CrawlerLib
             _processedPages = new ConcurrentBag<Page>();
             _visitedLinks = new ConcurrentDictionary<Uri, int>();
             _client = new HttpClient();
+
+            _retryDelay = TimeSpan.FromSeconds(3);
+            _retryCount = 2;
 
             _startUri = uri;
             EnqueuePage(uri);
@@ -65,6 +71,11 @@ namespace CrawlerLib
         public void SetTimeout(double timeInSeconds)
         {
             _client.Timeout = TimeSpan.FromSeconds(timeInSeconds);
+        }
+
+        public void SetRetryDelay(double timeInSeconds)
+        {
+            _retryDelay = TimeSpan.FromSeconds(timeInSeconds);
         }
 
         public async Task Crawl(int maxTaskCount = 10, CancellationToken cancellationToken = default)
@@ -112,33 +123,62 @@ namespace CrawlerLib
             if (page == null)
                 return;
 
-            HttpResponseMessage response;
+            int currentRetry = 0;
+
+            for (; ; )
+            {
+                try
+                {
+                    HttpResponseMessage response;
+                    try
+                    {
+                        response = await _client.GetAsync(page.Uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                        if (!response.IsSuccessStatusCode
+                            || response.Content.Headers.ContentLength == null
+                            || response.Content.Headers.ContentLength == 0
+                            || response.Content.Headers.ContentType.MediaType != "text/html")
+                            return;
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // If the page gets a timeout, we just skip it
+                        return;
+                    }
+
+                    page.Html = await response.Content.ReadAsStringAsync();
+
+                    _processedPages.Add(page);
+
+                    HtmlDocument document = new HtmlDocument();
+                    document.LoadHtml(page.Html);
+                    page.Title = document.GetHeaderTitle();
+
+                    ProcessLinks(document);
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.Message);
+                    if (currentRetry++ > _retryCount)
+                        throw;
+                }
+
+                await Task.Delay(_retryDelay);
+            }
+
+            HandleAfterParseEvent(page);
+        }
+
+        private void HandleAfterParseEvent(Page page)
+        {
             try
             {
-                response = await _client.GetAsync(page.Uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-                if (!response.IsSuccessStatusCode 
-                    || response.Content.Headers.ContentLength == null
-                    || response.Content.Headers.ContentLength == 0
-                    || response.Content.Headers.ContentType.MediaType != "text/html")
-                    return;
+                AfterParseEvent?.Invoke(page);
             }
-            catch (OperationCanceledException)
+            catch
             {
-                // If the page gets a timeout, we just skip it
-                return;
+                // Not handling it because its a layer 8 problem.
             }
-
-            page.Html = await response.Content.ReadAsStringAsync();
-
-            _processedPages.Add(page);
-
-            HtmlDocument document = new HtmlDocument();
-            document.LoadHtml(page.Html);
-            page.Title = document.GetHeaderTitle();
-
-            AfterParseEvent?.Invoke(page);
-
-            ProcessLinks(document);
         }
 
         private void ProcessLinks(HtmlDocument document)
